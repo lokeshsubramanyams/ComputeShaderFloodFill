@@ -1,0 +1,123 @@
+﻿
+#pragma kernel CSMain
+
+
+
+uniform uint process = 0;
+uniform uint sizeX;
+uniform uint sizeY;
+
+RWTexture2D<float4> Result;
+
+struct PixelInfo
+{
+  
+	uint2 id;
+ 	uint2 north;
+	uint2 south;
+	uint2 east;
+	uint2 west;
+	uint2 north_west;
+	uint2 north_east;
+	uint2 south_west;
+	uint2 south_east;
+
+    float4 color;
+	int seedPixel;
+	bool dontfill;//local
+  
+	void SetInfo(uint2 thisId)
+	{
+		id = thisId;
+		color = Result[id.xy];
+		GetValideNeighbour(id);
+		seedPixel = 0;
+		dontfill = IsBlackPixel(color);
+	}
+       
+    void GetValideNeighbour( uint2 current)
+    {
+        
+	 uint2	neighbour = uint2(current.x + 1, current.y);
+			east = Check(neighbour);
+			neighbour = uint2(current.x - 1, current.y);
+			west = Check(neighbour);
+            neighbour = uint2(current.x , current.y-1);
+			north = Check(neighbour);
+           	neighbour = uint2(current.x , current.y +1);
+			south = Check(neighbour);
+          	neighbour = uint2(current.x + 1, current.y+1);
+			north_east = Check(neighbour);
+           	neighbour = uint2(current.x - 1, current.y-1);
+			south_west = Check(neighbour);
+           	neighbour = uint2(current.x + 1, current.y-1);
+			north_west = Check(neighbour);
+           	neighbour = uint2(current.x + 1, current.y-1);
+			south_east = Check(neighbour);
+
+    }
+    
+    uint2 Check(uint2 neighbour)
+    {
+      if(neighbour.x<0 || neighbour.y<0)return uint2(0,0);
+      if(neighbour.x > sizeX || neighbour.y > sizeY)return uint2(0,0);
+      float len =  length(Result[neighbour.xy]);if (len >= 1) return uint2(0, 0);
+	  return neighbour;
+    }
+    
+	void ProcessPixel()
+	{
+		if (dontfill)return;
+						
+		float currentColorLength = Length(color);
+		float currentpixel		 = Length(Result[id.xy]);
+		
+		 if(seedPixel == 1) 
+		{
+			Result[id.xy] = color;
+			PaintNeightbours(Result[id.xy]);
+			seedPixel = 0; 
+		}
+		else if(!IsEqual(color , Result[id.xy]))
+		{
+			PaintNeightbours(Result[id.xy]);
+			color = Result[id.xy];
+		}
+		
+	}
+
+	void PaintNeightbours(float4 color)
+	{
+		if (isValide(north))Result[north.xy] = color;
+		if (isValide(south))Result[south.xy] = color;
+		if (isValide(east))Result[east.xy] = color;
+		if (isValide(west))Result[west.xy] = color;
+
+		if (isValide(north_west))Result[north_west.xy] = color;
+		if (isValide(north_east))Result[north_east.xy] = color;
+		if (isValide(south_west))Result[south_west.xy] = color;
+		if (isValide(south_east))Result[south_east.xy] = color;
+
+	}
+	
+	int Length(float4 val){	return round(val.x + val.y + val.z + val.w);}
+	bool IsBlackPixel(float4 rgb){return round(rgb.x + rgb.y + rgb.z +rgb.w) == 1;}
+	bool isValide(uint2 id){return id.x != 0 && id.y != 0;}
+	bool IsEqual(float4 a, float4 b){return (a.x == b.x && a.y == b.y && a.z == b.z && a.w == b.w);}
+	
+};
+
+uniform uint2 seedPixel;
+RWStructuredBuffer<PixelInfo>pixerInfos;
+
+
+uint GetIndex(uint2 id){ return id.x+id.y * sizeX;}
+
+[numthreads(8,8,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+	if (process == 0)
+		pixerInfos[GetIndex(id.xy)].SetInfo(id.xy);
+	else 
+		pixerInfos[GetIndex(id.xy)].ProcessPixel();
+}
